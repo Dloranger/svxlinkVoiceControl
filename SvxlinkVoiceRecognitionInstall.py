@@ -1,6 +1,6 @@
 sudo apt-get update
 sudo apt-get install -y python3-pandas python3-sklearn swig bison \
-libasound2-dev flac nltk python3-pyaudio
+libasound2-dev flac python3-pyaudio
 
 sudo pip3 install SpeechRecognition nltk numpy simpleaudio
 
