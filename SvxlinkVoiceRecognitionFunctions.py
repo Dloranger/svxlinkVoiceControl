@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-import GeneralFunctions as func
+
 import re # regular expressions
 import speech_recognition as sr
+import time
 
 # natural language tool kit
 import nltk 
@@ -13,7 +14,46 @@ from nltk.stem.porter import PorterStemmer #keep only stem words
 import pyaudio  
 import wave
 import simpleaudio as sa
+def GetRxCosGpio(RxPortName,SvxlinkConfPath):
+	f=open(SvxlinkConfPath, "r")
+	if f.mode == 'r':
+		configFile =f.read()
+		RxStart = configFile.find("["+RxPortName+"]")
+		# trim down the file to just what we care about
+		try:
+			#400 seems like a reasonable limit to the number of characters
+			configFile = configFile[RxStart:ReceiverStart+400]
+		except:
+			# just in case 400 is too many, just take to the end of the file
+			configFile = configFile[RxStart:]
+		GPIO_SQL_PIN = configFile[configFile.find("GPIO_SQL_PIN=")+13:
+								configFile.find("GPIO_SQL_PIN=")+20]
+		#trim any whitespace that might have been captured
+		GPIO_SQL_PIN = GPIO_SQL_PIN.rstrip()
+		return str(GPIO_SQL_PIN)
+	else:
+		return -1
 
+def GetTxPTTGpio(TxPortName,SvxlinkConfPath):
+	f=open(SvxlinkConfPath, "r")
+	if f.mode == 'r':
+		configFile =f.read()
+		TxStart = configFile.find("["+TxPortName+"]")
+		# trim down the file to just what we care about
+		try:
+			#400 seems like a reasonable limit to the number of characters
+			configFile = configFile[TxStart:ReceiverStart+400]
+		except:
+			# just in case 400 is too many, just take to the end of the file
+			configFile = configFile[TxStart:]
+		PTT_PIN = configFile[configFile.find("PTT_PIN=")+8:
+								configFile.find("PTT_PIN=")+15]	
+		#trim any whitespace that might have been captured
+		PTT_PIN = PTT_PIN.rstrip()
+		return str(PTT_PIN)
+	else:
+		return -1
+	
 def RecordAudioStreamGoogleSTT():
 	r = sr.Recognizer()
 	with sr.Microphone() as source:
@@ -24,11 +64,17 @@ def RecordAudioStreamGoogleSTT():
 	except sr.UnknownValueError:
 		pass
 				
-def PlayWaveAudioSimpleAudio (PathToAudioFile):
-	wave_obj = sa.WaveObject.from_wave_file(PathToAudioFile)
-	play_obj = wave_obj.play()
-	play_obj.wait_done()  # Wait until sound has finished playing
-
+def PlayWaveAudioSimpleAudio (AudioFile):
+	try:
+		wave_obj = sa.WaveObject.from_wave_file("/usr/share/svxlink/sounds/en_US/" \
+		+"svxlinkVoiceControl/"+AudioFile)
+		play_obj = wave_obj.play()
+		play_obj.wait_done()  # Wait until sound has finished playing
+	except:
+		#Display the warning no matter the setting, this needs to be
+		#known to the user
+		DebugMessage(1,"SVR **** WARNING **** AudioFile failed to play")
+	
 def ConvertAudioToText(verbose,
 					PathToAudioFile,
 					OnlineTranslationAllowed,
@@ -46,12 +92,12 @@ def ConvertAudioToText(verbose,
             ## recognize speech using Sphinx (online version?),
 			try:
 				Text = r.recognize_sphinx(audio)
-				func.DebugMessage(verbose,"Sphinx thinks you said " + Text)
+				DebugMessage(verbose,"Sphinx thinks you said " + Text)
 			except sr.UnknownValueError:
-				func.DebugMessage (verbose,"Sphinx could not understand audio")
+				DebugMessage (verbose,"Sphinx could not understand audio")
 				return -1
 			except sr.RequestError as e:
-				func.DebugMessage (verbose,"Sphinx error; {0}".format(e))
+				DebugMessage (verbose,"Sphinx error; {0}".format(e))
 				return -1
     
 		elif OnlineTranslationService == 'Google':
@@ -63,13 +109,13 @@ def ConvertAudioToText(verbose,
         # `r.recognize_google(audio, key="GOOGLE_SPEECH_RECOGNITION_API_KEY")`
         # instead of `r.recognize_google(audio)`
 				Text = r.recognize_google(audio)
-				func.DebugMessage (verbose,"Google thinks you said: " + Text)
+				DebugMessage (verbose,"Google thinks you said: " + Text)
 			except sr.UnknownValueError:
-				func.DebugMessage (verbose,
+				DebugMessage (verbose,
 					"Google Speech Recognition could not understand audio")
 				return -1
 			except sr.RequestError as e:
-				func.DebugMessage (verbose,
+				DebugMessage (verbose,
 					"Could not request results from Google Speech Recognition \
 					{0}".format(e))
 				return -1
@@ -80,15 +126,15 @@ def ConvertAudioToText(verbose,
             #GOOGLE_CLOUD_SPEECH_CREDENTIALS = r"""INSERT THE 
 			#CONTENTS OF THE GOOGLE CLOUD SPEECH JSON CREDENTIALS FILE HERE""""
 			try:
-				func.DebugMessage (verbose,
+				DebugMessage (verbose,
 					"Google Cloud Speech thinks you said " +
                       r.recognize_google_cloud(audio, \
                       credentials_json=GOOGLE_CLOUD_SPEECH_CREDENTIALS))
 			except sr.UnknownValueError:
-				func.DebugMessage (verbose,
+				DebugMessage (verbose,
 					"Google Cloud Speech could not understand audio")
 			except sr.RequestError as e:
-				func.DebugMessage (verbose,"Could not request results from \
+				DebugMessage (verbose,"Could not request results from \
 				Google Cloud Speech service; {0}".format(e))
 			return Text
 
@@ -108,5 +154,47 @@ def CleanText(TextToClean,language):
     #revert the fixed up list of words back to a string
 	text = ' '.join(text)
 	return text
+	
+	
+	
+def DebugMessage (verbose,Message):
+	if verbose:
+		print (Message)
+				
+def ReadGPIOValue (PathToGpioValue):
+	f=open(PathToGpioValue, "r")
+	if f.mode == 'r':
+		GPIO =f.read()
+	return str(GPIO)
+	
+def WriteGPIOValue (PathToGpioValue,Value):
+	f=open(PathToGpioValue, "w")
+	if f.mode == 'w':
+		f.write(str(Value))
+		return 0
+	else:
+		return -1
+		
+def WaitForGpioToggle (InitialValue,Timeout,PathToGpioValue,verbose):
+	DebugMessage (verbose,"Entered WaitForGPIOToggle")
+	while Timeout != 0:
+		# when reading the file we get a line return, need to ignore it
+		#DebugMessage (verbose,"Timeout:"+str(Timeout))
+		GPIO = ReadGPIOValue(PathToGpioValue).replace('\r\n', '').replace('\n', '')
+		#DebugMessage (verbose,"GPIO:"+str(GPIO))
+		#DebugMessage (verbose,"INIT:"+InitialValue)
+		if GPIO == InitialValue:
+			if Timeout != -1:
+				Timeout = Timeout-1
+				
+			if Timeout == 0:
+				DebugMessage (verbose,"Timeout occured")
+				return -1	
+		else:
+			if (InitialValue == "0" and GPIO == "1") or \
+				(InitialValue == "1" and GPIO == "0"):
+				DebugMessage (verbose,"Confirmed GPIO Toggle")
+				return 0
+		time.sleep (0.1)
 	
 	

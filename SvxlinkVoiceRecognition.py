@@ -23,114 +23,150 @@ OnlineTranslationAllowed = True
 OnlineTranslationService = 'Google'   #should work for most uses and is free
 #OnlineTranslationService = 'DeepVoice' # Not implemented yet
 #OnlineTranslationService = 'Sphinx' # Not implemented yet
-COS_GPIO = "gpio31"
-#PathToGpioValue = "/sys/class/gpio/"+COS_GPIO+"/value"
-PathToGpioValue = "./tmp.tmp"
+
+#PathToCOSGpioValue = "./tmp.tmp"
 
 # what should the wake-work of the system be? 3-4 syllables, 1 word
     
 #WakePhrase = "hey aurora"
 #WakePhrase = "hey zulu"
-WakePhrase = 'Aragorn'
+WakePhrase = 'Aurora'
 #what language to use "english"
 language = "english"
 
 #How long should be allowed for the command (COS) to come in after the wakeup
-TimeOutCounterInitial = 600 # n*0.01 seconds
+TimeOutCounterInitial = 60 # n*0.1 seconds
 
 #load dependencies
 import numpy as np
 import pandas as pd
 import time
 import importlib as imp
-#holds the misc voice functions used in this script
-import VoiceRecognitionFunctions as VRF 
-import GeneralFunctions as func # general purpose functions
+#holds the misc voice VRFtions used in this script
+import SvxlinkVoiceRecognitionFunctions as VRF 
+#import GeneralVRFtions as VRF # general purpose VRFtions
 from sklearn.feature_extraction.text import CountVectorizer # for bag of words
-
+import subprocess
 from os import path
 
-
-
-# Where does the system store the recorded audio
-PathToAudioFile = "Speak.wav"
+# Where does the system store the recorded audio (tempfs to record to ramdisk)
+PathToAudioFile = '/dev/recordedAudio.wav'
 
 # set debugging verbose to 0 for quiet logs, set to 1 for traceable outputs
 verbose = 1
 
+##Which Channels use?
+RxPortName = "RX_Port1"
+COS_GPIO = VRF.GetRxCosGpio(RxPortName,"/etc/svxlink/svxlink.conf")
+PathToCOSGpioValue = "/sys/class/gpio/"+COS_GPIO+"/value"
+print ("RxGPIO:"+PathToCOSGpioValue)
+
+TxPortName = "TX_Port1"
+PTT_GPIO = VRF.GetTxPTTGpio(TxPortName,"/etc/svxlink/svxlink.conf")
+PathToPTTGpioValue = "/sys/class/gpio/"+PTT_GPIO+"/value"
+print ("TxGPIO:"+PathToPTTGpioValue)
+
 #code assumes COS is active low logic type
-COS = func.UpdateCOSValue (PathToGpioValue) #get initial value
+COS = VRF.ReadGPIOValue (PathToCOSGpioValue) #get initial value
 while True : 
 	
-	func.DebugMessage (verbose,"Waiting for the wakeup command")
+	VRF.DebugMessage (verbose,"Waiting for the wakeup command")
 	
 	#Waiting for the COS to be triggered, aka "idle state", do not use timeout
-	func.WaitForCOSToggle("0", -1,PathToGpioValue)
+	VRF.WaitForGpioToggle("0", -1,PathToCOSGpioValue,verbose)
 	# Cos is now active
-	func.DebugMessage (verbose,"Waiting 5 seconds for the COS to release")
-	# if note timing out, then we want to translate
-	TranslateDisable = func.WaitForCOSToggle("1", 500,PathToGpioValue)
-	func.DebugMessage (verbose,TranslateDisable)
+	VRF.DebugMessage (verbose,"Waiting 5 seconds (max) for the COS to release")
+	p = subprocess.Popen(['arecord', '--device=dsnooped','--format','S16_LE', 
+	'-d 5','-c 2', '-r 48000',PathToAudioFile],shell=False)
+
+	# if not timing out, then we want to translate
+	TranslateDisable = VRF.WaitForGpioToggle("1", 50,PathToCOSGpioValue,verbose)
+	#make sure the recording has terminated
+	p.terminate()
+	time.sleep(0.05)
+	
+	VRF.DebugMessage (verbose,"TranslateDisable:"+str(TranslateDisable))
 	
 	if TranslateDisable:
-		func.WaitForCOSToggle("1", -1,PathToGpioValue)
+		VRF.WaitForGpioToggle("1", -1,PathToCOSGpioValue,verbose)
 	else:
-		func.DebugMessage (verbose,"COS has been released, translating text \n\
+		VRF.DebugMessage (verbose,"COS has been released, translating text \n\
 	looking for wake word")	
 	# Cos is now inactive
 	
 	##### TODO
 	# Replace this conversion with a live audio capture of the first n sec of
-	# live audio, this should be UDP streamed from SVXLINK, see the howto linked
+	# live audio, this should be UDP streamed from SVXLINK, see how to linked
 	# above for setting the svxlink side up
 	if not TranslateDisable:
+		# faults will return a -1 so be sure to convert to a string for property
+		# operation of the tokenizer
 		Text = VRF.ConvertAudioToText(verbose,
 										PathToAudioFile,
 										OnlineTranslationAllowed,
 										OnlineTranslationService)
-										#Tokenize the result
+		#Tokenize the result, make sure at least 2 tokens exist
+		Text = str(Text) + " abc def"
 		textList = Text.split()
 	else:
 		textList = [" "," "]
 	
 	if WakePhrase == textList[0] or WakePhrase == textList [1]: 
-		func.DebugMessage (verbose,"Wakeup word detected")
+		VRF.DebugMessage (verbose,"Wakeup word detected")
 				 
 		#Indicate to the user the system is listening
 		#Play some audio file back to the audio output, ENSURE PTT stays active
 		#playAudio ("The King is listening")
-		func.DebugMessage (verbose,"playing sound \"Repeater is listening\"")
-		VRF.PlayWaveAudioSimpleAudio('./Sounds/RepeaterListening.wav')
+		VRF.DebugMessage (verbose,"playing sound \"Repeater is listening\"")
+		
+		#Waiting for the PTT to be Released, aka "Currently Active", no timeout
+		VRF.WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+		
+		# send audio
+		VRF.WriteGPIOValue (PathToPTTGpioValue,1)
+		time.sleep(0.2)
+		VRF.PlayWaveAudioSimpleAudio('RepeaterListening.wav')
+		time.sleep(0.1)
+		VRF.WriteGPIOValue (PathToPTTGpioValue,0)
 		
 		# assume the cos signal is still idle when we get this far
-		func.DebugMessage (verbose,"waiting for command to arrive")
-		CommandArrived = func.WaitForCOSToggle("0",500,PathToGpioValue)
+		VRF.DebugMessage (verbose,"waiting for command to arrive")
+		CommandArrived = VRF.WaitForGpioToggle("0",100,PathToCOSGpioValue,verbose)
 		
-		# only watch for a while for short time so the system doesn't get out of
-		# sync, and commands should not be very long winded.  Check for a 
-		# timeout first since its the minimal code, easier than finding it 
-		# later buried down in the code. 
-		#
-		# 10 seconds seems like a fair compromise of ~5 seconds to initiate the
-		# sending of the command, and also ending the commands, so we are only 
+		#start recording the command audio (20 sec max)
+		p = subprocess.Popen(['arecord', '--device=dsnooped','--format','S16_LE', 
+			'-d 20','-c 2', '-r 48000',PathToAudioFile],shell=False)
+		
 		# looking for the squelch to close now.
-		if (CommandArrived or func.WaitForCOSToggle("1",500,PathToGpioValue)):
-			func.DebugMessage (verbose,"Timeout waiting for command to arrive")
+		if (CommandArrived or VRF.WaitForGpioToggle("1",100,PathToCOSGpioValue,verbose)):
+			VRF.DebugMessage (verbose,"Timeout waiting for command to arrive")
 		else: 
-			#we didn't time out, so we must have gotten some audio to process
-			#COS has opened, collect the audio
-			### To be implemented
-			func.DebugMessage (verbose,"Command has been received")
+			#stop recording if its still going
+			try:
+				p.terminate()
+			except:
+				pass
+				
+			VRF.DebugMessage (verbose,"Command has been received")
 			
 			# prepare to try to figure out what the user is requesting, this is 
 			# where some machine learning process comes into play
+			Text = VRF.ConvertAudioToText(verbose,
+										PathToAudioFile,
+										OnlineTranslationAllowed,
+										OnlineTranslationService)
+			#Tokenize the result, make sure at least 2 tokens exist, use words
+			# that will get stripped away by the CleanText routine
+			Text = str(Text) + " of of"  
+			textList = Text.split()
 			cleanText = VRF.CleanText(Text,language)
+			VRF.DebugMessage(verbose,"distilled text:" +cleanText)
 			
 			# Apply the model to predict what user wants based on audio received
 			# new commands will need to have the models built with new sample
 			# audio files so the model can learn how to handle them
 			
-			func.DebugMessage (verbose,"doing something with NLP results")
+			VRF.DebugMessage (verbose,"doing something with NLP results")
 			time.sleep (2)
     
 		
