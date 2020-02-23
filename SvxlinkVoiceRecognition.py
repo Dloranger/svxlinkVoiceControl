@@ -42,6 +42,7 @@ import numpy as np
 import pandas as pd
 import time
 import importlib as imp
+import re as re
 #holds the misc voice VRFtions used in this script
 import SvxlinkVoiceRecognitionFunctions as VRF 
 #import GeneralVRFtions as VRF # general purpose VRFtions
@@ -68,7 +69,11 @@ print ("TxGPIO:"+PathToPTTGpioValue)
 
 #code assumes COS is active low logic type
 COS = VRF.ReadGPIOValue (PathToCOSGpioValue) #get initial value
-while True : 
+while True :
+	Text = "EchoLink connect 1 2 3 4 5 6"
+	
+	
+	
 	
 	VRF.DebugMessage (verbose,"Waiting for the wakeup command")
 	
@@ -158,18 +163,59 @@ while True :
 			#Tokenize the result, make sure at least 2 tokens exist, use words
 			# that will get stripped away by the CleanText routine
 			Text = str(Text) + " of of"  
-			textList = Text.split()
-			cleanText = VRF.CleanText(Text,language)
-			VRF.DebugMessage(verbose,"distilled text:" +cleanText)
+			Text = Text.lower()
+			#textList = Text.split()
+			#cleanText = VRF.CleanText(Text,language) # This wipes out numbers
+			#VRF.DebugMessage(verbose,"distilled text:" +cleanText)
 			
 			# Apply the model to predict what user wants based on audio received
 			# new commands will need to have the models built with new sample
 			# audio files so the model can learn how to handle them
 			
 			VRF.DebugMessage (verbose,"doing something with NLP results")
-			time.sleep (2)
+			# basic console syntax to send a message is 
+			# echo 212*<code to send># | nc -q 1 127.0.0.1 10000
+			# note without the '-q 1' flag, the command will never terminate
+			# this flag tells it to quit after 1 second which is plenty fast for
+			# what we need to do
+			if Text.find("echolink") or Text.find("echo link"):
+				VRF.DebugMessage (verbose,"doing something with Echolink Module")
+				#Something related to echolink has been requested
+				# use "disconnect" first before connect as "connect" will be
+				# found despite the phrase being "disconnect"
+				if Text.find("deactivate") != -1:
+					
+						VRF.DebugMessage (verbose,"Trying to deactivate")
+						VRF.WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+						VRF.ExitModules()						
+					
+				elif Text.find("connect") != -1:
+					try:
+						time.sleep (0.1)
+						Node_ID = re.findall(r"(?:\s*\d){4,6}", Text)
+						Node_ID = str(Node_ID[0])
+						Node_ID = Node_ID.replace(" ","")
+						print (Node_ID)
+						# activate echolink module
+						cmd = "echo *2# | nc -q 1 " + \
+								"127.0.0.1 10000"
+						p = subprocess.Popen(cmd, shell=True)
+						
+						VRF.WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+						time.sleep (0.5)
+						# connect to the target node
+						cmd = "echo *"+str(Node_ID)+"# | nc -q 1 " + \
+								"127.0.0.1 10000"
+						p = subprocess.Popen(cmd, shell=True)
+						VRF.WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+					except:
+						print ("failed to connect to Echolink node")
+				else:
+					print("Unknown Echolink Command")
+					time.sleep (2)
     
 		
+
 
 #build the prediction model
     

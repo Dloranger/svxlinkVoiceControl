@@ -3,6 +3,7 @@
 import re # regular expressions
 import speech_recognition as sr
 import time
+import subprocess
 
 # natural language tool kit
 import nltk 
@@ -137,6 +138,10 @@ def ConvertAudioToText(verbose,
 				DebugMessage (verbose,"Could not request results from \
 				Google Cloud Speech service; {0}".format(e))
 			return Text
+def ExitModules():
+	cmd = "echo *## | nc -q 1 127.0.0.1 10000"
+	p = subprocess.Popen(cmd, shell=True)
+
 
 def CleanText(TextToClean,language):
 	
