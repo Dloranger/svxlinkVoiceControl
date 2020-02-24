@@ -1,0 +1,25 @@
+;;;;; Author: Richard Neese<kb3vgw@gmail.com>
+;;;;; expanded for voice control by Dan Loranger, KG7PAR
+
+[Unit]
+Description=SvxLink repeater control software
+Documentation=man:svxlink(1)
+Requires=svxlink_gpio_setup.service
+After=network.target remote-fs.target syslog.target time.target
+After=svxlink_gpio_setup.service
+
+[Service]
+EnvironmentFile=/etc/default/svxlink
+PIDFile=/run/svxlink.pid
+ExecStartPre=-/bin/touch /var/log/svxlink
+ExecStartPre=-/bin/chown $RUNASUSER /var/log/svxlink --runasuser=$RUNASUSER'
+ExecStart=/bin/sh -c '/usr/bin/svxlinkVoiceControl/SvxlinkVoiceRecognition.py 2>&1 >> /var/log/svxlink & nc -lk 10000 | /usr/bin/svxlink --pidfile=/run/svxlink.pid --runasuser=$RUNASUSER --config=$CFGFILE 2>&1 >> /var/log/svxlink'
+Restart=on-failure
+TimeoutStartSec=60
+#WatchdogSec=
+#NotifyAccess=main
+LimitCORE=infinity
+WorkingDirectory=/etc/svxlink
+
+[Install]
+WantedBy=multi-user.target

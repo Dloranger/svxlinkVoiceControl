@@ -70,11 +70,7 @@ print ("TxGPIO:"+PathToPTTGpioValue)
 #code assumes COS is active low logic type
 COS = VRF.ReadGPIOValue (PathToCOSGpioValue) #get initial value
 while True :
-	Text = "EchoLink connect 1 2 3 4 5 6"
-	
-	
-	
-	
+	VRF.DebugMessage (1,"SvxlinkVoiceControl Running")
 	VRF.DebugMessage (verbose,"Waiting for the wakeup command")
 	
 	#Waiting for the COS to be triggered, aka "idle state", do not use timeout
@@ -143,7 +139,8 @@ while True :
 			'-d 20','-c 2', '-r 48000',PathToAudioFile],shell=False)
 		
 		# looking for the squelch to close now.
-		if (CommandArrived or VRF.WaitForGpioToggle("1",100,PathToCOSGpioValue,verbose)):
+		if (CommandArrived or 
+			VRF.WaitForGpioToggle("1",100,PathToCOSGpioValue,verbose)):
 			VRF.DebugMessage (verbose,"Timeout waiting for command to arrive")
 		else: 
 			#stop recording if its still going
@@ -154,68 +151,118 @@ while True :
 				
 			VRF.DebugMessage (verbose,"Command has been received")
 			
-			# prepare to try to figure out what the user is requesting, this is 
-			# where some machine learning process comes into play
+			# Send the audio file to get converted to text
 			Text = VRF.ConvertAudioToText(verbose,
 										PathToAudioFile,
 										OnlineTranslationAllowed,
 										OnlineTranslationService)
-			#Tokenize the result, make sure at least 2 tokens exist, use words
-			# that will get stripped away by the CleanText routine
 			Text = str(Text) + " of of"  
 			Text = Text.lower()
-			#textList = Text.split()
-			#cleanText = VRF.CleanText(Text,language) # This wipes out numbers
-			#VRF.DebugMessage(verbose,"distilled text:" +cleanText)
 			
-			# Apply the model to predict what user wants based on audio received
-			# new commands will need to have the models built with new sample
-			# audio files so the model can learn how to handle them
+			VRF.DebugMessage (verbose,"Processing command")
+			# Searches are using lower case letters, be sure to match for new
+			# search cases.
 			
-			VRF.DebugMessage (verbose,"doing something with NLP results")
-			# basic console syntax to send a message is 
-			# echo 212*<code to send># | nc -q 1 127.0.0.1 10000
-			# note without the '-q 1' flag, the command will never terminate
-			# this flag tells it to quit after 1 second which is plenty fast for
-			# what we need to do
-			if Text.find("echolink") or Text.find("echo link"):
-				VRF.DebugMessage (verbose,"doing something with Echolink Module")
-				#Something related to echolink has been requested
-				# use "disconnect" first before connect as "connect" will be
-				# found despite the phrase being "disconnect"
-				if Text.find("deactivate") != -1:
-					
-						VRF.DebugMessage (verbose,"Trying to deactivate")
-						VRF.WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
-						VRF.ExitModules()						
-					
-				elif Text.find("connect") != -1:
-					try:
-						time.sleep (0.1)
-						Node_ID = re.findall(r"(?:\s*\d){4,6}", Text)
-						Node_ID = str(Node_ID[0])
-						Node_ID = Node_ID.replace(" ","")
-						print (Node_ID)
-						# activate echolink module
-						cmd = "echo *2# | nc -q 1 " + \
-								"127.0.0.1 10000"
-						p = subprocess.Popen(cmd, shell=True)
-						
-						VRF.WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
-						time.sleep (0.5)
-						# connect to the target node
-						cmd = "echo *"+str(Node_ID)+"# | nc -q 1 " + \
-								"127.0.0.1 10000"
-						p = subprocess.Popen(cmd, shell=True)
-						VRF.WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
-					except:
-						print ("failed to connect to Echolink node")
+			# already consumed top level key phrases 
+				# sub phrases may be reused due to top level filtering but may
+				# not match any of these top level key phrases as they will
+				# cause the system to react incorrectly.
+				#
+				# Keep in mind the search will find these phrases if they are
+				# part of a bigger word. for example "id" could be found in
+				# "idea", "lid", etc, so be conscious of this implication and 
+				# use spaces where it makes sense based on the responses you get
+				# back from the translation service.
+				#
+				# Try to allow for reasonable synanyms where it makes sense so
+				# the system can be more tolerant of truly natural language.
+			# Keep alpha sorted based on first non white space character
+			
+			################## A ##################
+			################## B ##################
+			################## C ##################
+			################## D ##################
+			################## E ##################
+			# "echolink"
+			# "echo link"
+			################## F ##################
+			################## G ##################
+			################## H ##################
+			# "help"
+			################## I ##################
+			# "identifi" - CleanText result
+			################## J ##################
+			################## K ##################
+			################## L ##################
+			################## M ##################
+			################## N ##################
+			################## O ##################
+			################## P ##################
+			################## Q ##################
+			################## R ##################
+			################## S ##################
+			################## T ##################
+			################## U ##################
+			################## V ##################
+			################## W ##################
+			################## X ##################
+			################## Y ##################
+			################## Z ##################
+			
+			# There will be 2 subsections here, ones that need to be processed
+			# with exact wording or contains numbers or other keywords that get
+			# stripped out by the cleanText() function.  Where possible, this 
+			# cleanText() should be used as it will allow for a lot more works
+			# to trigger the command as it will remove the tenses (future/past)
+			# and drops the words down to their root words.  This is a trick
+			# from the machine learning community to help with flexibility and
+			# accuracy
+			
+			# Section 1: Commands that cannot use the CleanText due to having 
+			# key elements stripped out such as numbers
+			if (Text.find("echolink") != -1) or (Text.find("echo link") != -1):
+				VRF.DebugMessage (verbose,"Using Echolink Module")
+				# Something related to echolink has been requested
+				if (Text.find("deactivate") != -1) or \
+						(Text.find("disconnect") != -1):
+						VRF.DebugMessage (verbose,"Try to deactivate echolink")
+						try:
+							VRF.ExitModules(PathToPTTGpioValue,verbose)
+						except:
+							print ("failed to enter exitModules()")
+				elif (Text.find("connect") != -1) or \
+						(Text.find("activate") != -1):
+					VRF.DebugMessage (verbose,"Try to activate echolink")
+					#try:
+					VRF.EcholinkConnect(Text, PathToPTTGpioValue, verbose)
+					#except:
+					#	print ("failed to connect to Echolink node")
 				else:
 					print("Unknown Echolink Command")
 					time.sleep (2)
-    
-		
-
+			elif (Text.find("relay")!=-1):
+				VRF.DebugMessage (verbose,"Relay command not implemented yet")
+			
+			# Section 2: Commands that can use the CleanText without issues
+			# process the command and strip unused words and bring back to the 
+			# root words for maximum flexibility
+			else:
+				Text = VRF.CleanText(Text,language)
+				VRF.DebugMessage (verbose,Text)
+				if (Text.find("help")!=-1):
+				# this one can be touchy as the responses might get pretty long
+				# and also have to keep in mind there is the help for both the 
+				# voice system as well as the help built within svxlink directly
+				# which will be different content
+					VRF.DebugMessage (verbose,"Help command not implemented yet")
+				elif (Text.find("identifi")!=-1):
+					VRF.DebugMessage (verbose,"Requesting the system to long ID")
+					try:
+						VRF.SelfIdentify(PathToPTTGpioValue,verbose)
+					except:
+						VRF.DebugMessage (verbose,"Failed to self ID") 
+### some stuff for later when more advanced machine learning can be implemented
+# ignore for now
 
 #build the prediction model
     

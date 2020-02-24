@@ -7,6 +7,7 @@ import subprocess
 
 # natural language tool kit
 import nltk 
+#nltk.path.append('/home/root/nltk_data/')
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer #keep only stem words
@@ -138,10 +139,6 @@ def ConvertAudioToText(verbose,
 				DebugMessage (verbose,"Could not request results from \
 				Google Cloud Speech service; {0}".format(e))
 			return Text
-def ExitModules():
-	cmd = "echo *## | nc -q 1 127.0.0.1 10000"
-	p = subprocess.Popen(cmd, shell=True)
-
 
 def CleanText(TextToClean,language):
 	
@@ -159,12 +156,22 @@ def CleanText(TextToClean,language):
     #revert the fixed up list of words back to a string
 	text = ' '.join(text)
 	return text
-	
-	
-	
+		
 def DebugMessage (verbose,Message):
 	if verbose:
-		print (Message)
+		for i in range (6):
+			try:
+				f = open("/var/log/svxlink", "a")
+				f.write("SVXLINK_VOICE: "+Message+"\n")
+				f.close()
+				return 0
+			except:
+				pass
+				#likely the file is already open by svxlink
+		return -1		
+				
+			
+		
 				
 def ReadGPIOValue (PathToGpioValue):
 	f=open(PathToGpioValue, "r")
@@ -181,7 +188,7 @@ def WriteGPIOValue (PathToGpioValue,Value):
 		return -1
 		
 def WaitForGpioToggle (InitialValue,Timeout,PathToGpioValue,verbose):
-	DebugMessage (verbose,"Entered WaitForGPIOToggle")
+	#DebugMessage (verbose,"Entered WaitForGPIOToggle")
 	while Timeout != 0:
 		# when reading the file we get a line return, need to ignore it
 		#DebugMessage (verbose,"Timeout:"+str(Timeout))
@@ -198,8 +205,80 @@ def WaitForGpioToggle (InitialValue,Timeout,PathToGpioValue,verbose):
 		else:
 			if (InitialValue == "0" and GPIO == "1") or \
 				(InitialValue == "1" and GPIO == "0"):
-				DebugMessage (verbose,"Confirmed GPIO Toggle")
+				#DebugMessage (verbose,"Confirmed GPIO Toggle")
 				return 0
 		time.sleep (0.1)
 	
+############################################################################
+############################################################################
+#																		   #
+#    FUNCTIONS THAT INTERACT WITH THE DTMF SYSTEM WITHIN SVXLINK		   #
+#																		   #
+############################################################################
+############################################################################
 	
+# basic console syntax to send a message is 
+	# echo 212*<code to send># | nc -q 1 127.0.0.1 10000
+	# note without the '-q 1' flag, the command will never terminate
+	# this flag tells it to quit after 1 second which is plenty fast for
+	# what we need to do
+			
+	
+	
+def EcholinkConnect (Text,PathToPTTGpioValue,verbose):
+	Node_ID = re.findall(r"(?:\s*\d){4,6}", Text)
+	Node_ID = str(Node_ID[0])
+	Node_ID = Node_ID.replace(" ","")
+	DebugMessage (verbose, Node_ID)					
+	# make sure the length is long enough to have a chance of working
+	try:
+		# activate echolink module
+		cmd = 'echo *2# | nc -q 1 127.0.0.1 10000'
+		p = subprocess.Popen(cmd, shell=True)
+		#p = subprocess.check_call(cmd, shell=True)
+		#DebugMessage (verbose, p)	
+		#wait for the system to stop talking
+		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+		#just a bit of extra margin
+		time.sleep (0.5)
+						
+		# connect to the target node
+		cmd = "echo *"+str(Node_ID)+"# | nc -q 1 127.0.0.1 10000 "
+		p = subprocess.Popen(cmd, shell=True)
+		# wait for the system to stop talking
+		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+	except:
+		DebugMessage (1, "Echolink connection failed")
+		ExitModules()
+		
+def ExitModules(PathToPTTGpioValue,verbose):
+		try:
+			DebugMessage (verbose, "Entered Exit Modules command")
+			#wait for the system to stop talking
+			WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+			cmd = "echo *## | nc -q 1 127.0.0.1 10000"
+			p = subprocess.Popen(cmd, shell=True)
+			#wait for the system to stop talking
+			WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+		except:
+			DebugMessage (1, "Failed to send Exit Modules command")
+		
+def Relays(PathToPTTGpioValue,verbose):
+	### FUNCTION NOT IMPLEMENTED YET
+		
+	#cmd = "echo *## | nc -q 1 127.0.0.1 10000"
+	#p = subprocess.Popen(cmd, shell=True)
+	#wait for the system to stop talking
+	WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+		
+def SelfIdentify (PathToPTTGpioValue,verbose):
+	try:
+		#wait for the system to stop talking
+		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
+		# "*" DTMF command forces the system to self ID
+		# not sure why this needs to be *#*#, but it works reliably
+		# while *#* does not
+		cmd = "echo *#*# | nc -q 1 127.0.0.1 10000"
+		p = subprocess.Popen(cmd, shell=True)
+	except:
+		DebugMessage(1, "Failed to Self ID")
