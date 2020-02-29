@@ -176,6 +176,7 @@ while True :
 				#
 				# Try to allow for reasonable synanyms where it makes sense so
 				# the system can be more tolerant of truly natural language.
+			
 			# Keep alpha sorted based on first non white space character
 			
 			################## A ##################
@@ -209,73 +210,54 @@ while True :
 			################## Y ##################
 			################## Z ##################
 			
-			# There will be 2 subsections here, ones that need to be processed
-			# with exact wording or contains numbers or other keywords that get
-			# stripped out by the cleanText() function.  Where possible, this 
-			# cleanText() should be used as it will allow for a lot more works
-			# to trigger the command as it will remove the tenses (future/past)
-			# and drops the words down to their root words.  This is a trick
-			# from the machine learning community to help with flexibility and
-			# accuracy
-			
-			# Section 1: Commands that cannot use the CleanText due to having 
-			# key elements stripped out such as numbers
+
 			if (Text.find("echolink") != -1) or (Text.find("echo link") != -1):
 				VRF.DebugMessage (verbose,"Using Echolink Module")
 				# Something related to echolink has been requested
-				if (Text.find("deactivate") != -1) or \
-						(Text.find("disconnect") != -1):
+				if (Text.find("deactivate") != -1) or \ #close connection
+						(Text.find(" disconnect") != -1):
 						VRF.DebugMessage (verbose,"Try to deactivate echolink")
 						try:
 							VRF.ExitModules(PathToPTTGpioValue,verbose)
 						except:
 							print ("failed to enter exitModules()")
-				elif (Text.find("connect") != -1) or \
-						(Text.find("activate") != -1):
+				elif (Text.find(" connect ") != -1) or \ #Open connection
+						(Text.find("activate ") != -1):
 					VRF.DebugMessage (verbose,"Try to activate echolink")
-					#try:
-					VRF.EcholinkConnect(Text, PathToPTTGpioValue, verbose)
-					#except:
-					#	print ("failed to connect to Echolink node")
+					try:
+						VRF.EcholinkConnect(Text, PathToPTTGpioValue, verbose)
+					except:
+						print ("failed to connect to Echolink node")
+				elif (Text.find("list ")!=-1) and \ #list connections
+					(Text.find("connected")!=-1): 
+					VRF.DebugMessage (verbose,"List connected nodes requested")
+					try:
+						VRF.EchoListConnected(PathToPTTGpioValue, verbose)
+					except:
+						print ("failed to trigger EchoListconnect function")
+				elif (Text.find("play ")!=-1) and \ #Play local node
+					(Text.find("local")!=-1): 
+					VRF.DebugMessage (verbose,"play local node requested")
+					try:
+						VRF.EchoLinkLocal(Text, PathToPTTGpioValue, verbose)
+					except:
+						print ("failed to trigger EchoListconnect function")
 				else:
 					print("Unknown Echolink Command")
 					time.sleep (2)
 			elif (Text.find("relay")!=-1):
 				VRF.DebugMessage (verbose,"Relay command not implemented yet")
-			
-			# Section 2: Commands that can use the CleanText without issues
-			# process the command and strip unused words and bring back to the 
-			# root words for maximum flexibility
-			else:
 				Text = VRF.CleanText(Text,language)
 				VRF.DebugMessage (verbose,Text)
-				if (Text.find("help")!=-1):
+			elif (Text.find("help")!=-1):
 				# this one can be touchy as the responses might get pretty long
 				# and also have to keep in mind there is the help for both the 
 				# voice system as well as the help built within svxlink directly
 				# which will be different content
-					VRF.DebugMessage (verbose,"Help command not implemented yet")
-				elif (Text.find("identifi")!=-1):
-					VRF.DebugMessage (verbose,"Requesting the system to long ID")
-					try:
-						VRF.SelfIdentify(PathToPTTGpioValue,verbose)
-					except:
-						VRF.DebugMessage (verbose,"Failed to self ID") 
-### some stuff for later when more advanced machine learning can be implemented
-# ignore for now
-
-#build the prediction model
-    
-#corpus = []
-#for i in range(0,1): #training data size
-    #convert the sound clip to raw text
-#    TextToReview = VRF.ConvertAudioToText(AudioPaths[i],
-#                                         OnlineTranslationAllowed,
-#                                         OnlineTranslationService)
-    #clean the text and add back to new corpus array
-#    corpus.append(VRF.CleanText(TextToReview,language))
-        
-
-#Create the "Bag of words model" <aka "tokenizing">
-#cv = CountVectorizer()
-#X = cv.fit_transform(corpus)
+				VRF.DebugMessage (verbose,"Help command not implemented yet")
+			elif (Text.find("identifi")!=-1):
+				VRF.DebugMessage (verbose,"Requesting the system to long ID")
+				try:
+					VRF.SelfIdentify(PathToPTTGpioValue,verbose)
+				except:
+					VRF.DebugMessage (verbose,"Failed to self ID") 
