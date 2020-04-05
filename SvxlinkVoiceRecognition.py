@@ -24,12 +24,7 @@ OnlineTranslationService = 'Google'   #should work for most uses and is free
 #OnlineTranslationService = 'DeepVoice' # Not implemented yet
 #OnlineTranslationService = 'Sphinx' # Not implemented yet
 
-#PathToCOSGpioValue = "./tmp.tmp"
-
 # what should the wake-work of the system be? 3-4 syllables, 1 word
-    
-#WakePhrase = "hey aurora"
-#WakePhrase = "hey zulu"
 WakePhrase = 'Aurora'
 #what language to use "english"
 language = "english"
@@ -56,16 +51,16 @@ PathToAudioFile = '/dev/recordedAudio.wav'
 # set debugging verbose to 0 for quiet logs, set to 1 for traceable outputs
 verbose = 1
 
-##Which Channels use?
+##Which Channels to use?
 RxPortName = "RX_Port1"
 COS_GPIO = VRF.GetRxCosGpio(RxPortName,"/etc/svxlink/svxlink.conf")
 PathToCOSGpioValue = "/sys/class/gpio/"+COS_GPIO+"/value"
-print ("RxGPIO:"+PathToCOSGpioValue)
+VRF.DebugMessage (verbose,"RxGPIO:"+PathToCOSGpioValue)
 
 TxPortName = "TX_Port1"
 PTT_GPIO = VRF.GetTxPTTGpio(TxPortName,"/etc/svxlink/svxlink.conf")
 PathToPTTGpioValue = "/sys/class/gpio/"+PTT_GPIO+"/value"
-print ("TxGPIO:"+PathToPTTGpioValue)
+VRF.DebugMessage (verbose,"TxGPIO:"+PathToPTTGpioValue)
 
 #code assumes COS is active low logic type
 COS = VRF.ReadGPIOValue (PathToCOSGpioValue) #get initial value
@@ -74,7 +69,7 @@ while True :
 	VRF.DebugMessage (verbose,"Waiting for the wakeup command")
 	
 	#Waiting for the COS to be triggered, aka "idle state", do not use timeout
-	VRF.WaitForGpioToggle("0", -1,PathToCOSGpioValue,verbose)
+	VRF.WaitForGpioToggle("0", 600,PathToCOSGpioValue,verbose)
 	# Cos is now active
 	VRF.DebugMessage (verbose,"Waiting 5 seconds (max) for the COS to release")
 	p = subprocess.Popen(['arecord', '--device=dsnooped','--format','S16_LE', 
@@ -91,8 +86,8 @@ while True :
 	if TranslateDisable:
 		VRF.WaitForGpioToggle("1", -1,PathToCOSGpioValue,verbose)
 	else:
-		VRF.DebugMessage (verbose,"COS has been released, translating text \n\
-	looking for wake word")	
+		VRF.DebugMessage (verbose,"COS has been released, translating text")
+		VRF.DebugMessage (verbose,"looking for wake word")	
 	# Cos is now inactive
 	
 	##### TODO
@@ -110,14 +105,9 @@ while True :
 		Text = str(Text) + " abc def"
 		textList = Text.split()
 	else:
-		textList = [" "," "]
-	
+		textList = [" "," "]	
 	if WakePhrase == textList[0] or WakePhrase == textList [1]: 
 		VRF.DebugMessage (verbose,"Wakeup word detected")
-				 
-		#Indicate to the user the system is listening
-		#Play some audio file back to the audio output, ENSURE PTT stays active
-		#playAudio ("The King is listening")
 		VRF.DebugMessage (verbose,"playing sound \"Repeater is listening\"")
 		
 		#Waiting for the PTT to be Released, aka "Currently Active", no timeout
@@ -125,9 +115,11 @@ while True :
 		
 		# send audio
 		VRF.WriteGPIOValue (PathToPTTGpioValue,1)
+		VRF.DebugMessage (verbose,"Turning ON PTT")
 		time.sleep(0.2)
 		VRF.PlayWaveAudioSimpleAudio('RepeaterListening.wav')
 		time.sleep(0.1)
+		VRF.DebugMessage (verbose,"Turning OFF PTT")
 		VRF.WriteGPIOValue (PathToPTTGpioValue,0)
 		
 		# assume the cos signal is still idle when we get this far
@@ -176,7 +168,6 @@ while True :
 				#
 				# Try to allow for reasonable synanyms where it makes sense so
 				# the system can be more tolerant of truly natural language.
-			
 			# Keep alpha sorted based on first non white space character
 			
 			################## A ##################
@@ -210,54 +201,56 @@ while True :
 			################## Y ##################
 			################## Z ##################
 			
-
+			# There will be 2 subsections here, ones that need to be processed
+			# with exact wording or contains numbers or other keywords that get
+			# stripped out by the cleanText() function.  Where possible, this 
+			# cleanText() should be used as it will allow for a lot more works
+			# to trigger the command as it will remove the tenses (future/past)
+			# and drops the words down to their root words.  This is a trick
+			# from the machine learning community to help with flexibility and
+			# accuracy
+			
+			# Section 1: Commands that cannot use the CleanText due to having 
+			# key elements stripped out
 			if (Text.find("echolink") != -1) or (Text.find("echo link") != -1):
 				VRF.DebugMessage (verbose,"Using Echolink Module")
 				# Something related to echolink has been requested
-				if (Text.find("deactivate") != -1) or \ #close connection
-						(Text.find(" disconnect") != -1):
+				if (Text.find("deactivate") != -1) or \
+						(Text.find("disconnect") != -1):
 						VRF.DebugMessage (verbose,"Try to deactivate echolink")
 						try:
 							VRF.ExitModules(PathToPTTGpioValue,verbose)
 						except:
 							print ("failed to enter exitModules()")
-				elif (Text.find(" connect ") != -1) or \ #Open connection
-						(Text.find("activate ") != -1):
+				elif (Text.find("connect") != -1) or \
+						(Text.find("activate") != -1):
 					VRF.DebugMessage (verbose,"Try to activate echolink")
 					try:
 						VRF.EcholinkConnect(Text, PathToPTTGpioValue, verbose)
 					except:
-						print ("failed to connect to Echolink node")
-				elif (Text.find("list ")!=-1) and \ #list connections
-					(Text.find("connected")!=-1): 
-					VRF.DebugMessage (verbose,"List connected nodes requested")
-					try:
-						VRF.EchoListConnected(PathToPTTGpioValue, verbose)
-					except:
-						print ("failed to trigger EchoListconnect function")
-				elif (Text.find("play ")!=-1) and \ #Play local node
-					(Text.find("local")!=-1): 
-					VRF.DebugMessage (verbose,"play local node requested")
-					try:
-						VRF.EchoLinkLocal(Text, PathToPTTGpioValue, verbose)
-					except:
-						print ("failed to trigger EchoListconnect function")
+						VRF.DebugMessage (verbose,"Echolink failed to connect")
 				else:
 					print("Unknown Echolink Command")
 					time.sleep (2)
 			elif (Text.find("relay")!=-1):
 				VRF.DebugMessage (verbose,"Relay command not implemented yet")
+			
+			# Section 2: Commands that can use the CleanText without issues
+			# process the command and strip unused words and bring back to the 
+			# root words for maximum flexibility
+			else:
 				Text = VRF.CleanText(Text,language)
 				VRF.DebugMessage (verbose,Text)
-			elif (Text.find("help")!=-1):
+				if (Text.find("help")!=-1):
 				# this one can be touchy as the responses might get pretty long
 				# and also have to keep in mind there is the help for both the 
 				# voice system as well as the help built within svxlink directly
 				# which will be different content
-				VRF.DebugMessage (verbose,"Help command not implemented yet")
-			elif (Text.find("identifi")!=-1):
-				VRF.DebugMessage (verbose,"Requesting the system to long ID")
-				try:
-					VRF.SelfIdentify(PathToPTTGpioValue,verbose)
-				except:
-					VRF.DebugMessage (verbose,"Failed to self ID") 
+					VRF.DebugMessage (verbose,"Help command not implemented yet")
+				
+				elif (Text.find("identifi")!=-1):
+					VRF.DebugMessage (verbose,"Requesting the system to long ID")
+					try:
+						VRF.SelfIdentify(PathToPTTGpioValue,verbose)
+					except:
+						VRF.DebugMessage (verbose,"Failed to self ID") 

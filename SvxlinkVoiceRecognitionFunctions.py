@@ -68,11 +68,13 @@ def RecordAudioStreamGoogleSTT():
 				
 def PlayWaveAudioSimpleAudio (AudioFile):
 	try:
+		time.sleep (0.4) # allow the TX and soundcard to wake up
 		wave_obj = sa.WaveObject.from_wave_file("/usr/share/svxlink/sounds/en_US/" \
 		+"svxlinkVoiceControl/"+AudioFile)
 		play_obj = wave_obj.play()
 		play_obj.wait_done()  # Wait until sound has finished playing
 	except:
+		play_obj.stop_all()
 		#Display the warning no matter the setting, this needs to be
 		#known to the user
 		DebugMessage(1,"SVR **** WARNING **** AudioFile failed to play")
@@ -143,7 +145,7 @@ def ConvertAudioToText(verbose,
 def CleanText(TextToClean,language):
 	
 	#remove misc ascii chars
-	text = re.sub('[^a-zA-Z0-9]',' ',TextToClean.lower()) 
+	text = re.sub('[^a-zA-Z]',' ',TextToClean.lower()) 
 
     #split the string into list of words
 	text = text.split()
@@ -223,46 +225,7 @@ def WaitForGpioToggle (InitialValue,Timeout,PathToGpioValue,verbose):
 	# this flag tells it to quit after 1 second which is plenty fast for
 	# what we need to do
 			
-def EcholinkActivate(verbose);	
-		try:
-			# activate echolink module
-			cmd = 'echo *#2# | nc -q 1 127.0.0.1 10000'
-			p = subprocess.Popen(cmd, shell=True)
-			#wait for the system to stop talking
-			WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
-			#just a bit of extra margin
-			time.sleep (0.2)
-		except:
-			DebugMessage (verbose, "failed to activate to EchoLink module")
-			
-			
-def EchoLinkLocal(Text, PathToPTTGpioValue, verbose):
-	try:
-		# activate echolink module
-		EcholinkActivate(verbose)
-		#send the play local node command
-		cmd = 'echo *2# | nc -q 1 127.0.0.1 10000'
-		p = subprocess.Popen(cmd, shell=True)
-		#wait for the system to stop talking
-		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
-		#just a bit of extra margin
-		time.sleep (0.2)
-	except:
-		DebugMessage(verbose,"Failed to send EchoLinkLocal command")	
-		
-def EchoListConnected(PathToPTTGpioValue, verbose):
-	try:
-		# activate echolink module
-		EcholinkActivate(verbose)
-		#send the list active nodes command
-		cmd = 'echo *2# | nc -q 1 127.0.0.1 10000'
-		p = subprocess.Popen(cmd, shell=True)
-		#wait for the system to stop talking
-		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
-		#just a bit of extra margin
-		time.sleep (0.2)
-	except:
-		DebugMessage(verbose,"Failed to send EchoListConnected command")
+	
 	
 def EcholinkConnect (Text,PathToPTTGpioValue,verbose):
 	Node_ID = re.findall(r"(?:\s*\d){4,6}", Text)
@@ -274,15 +237,13 @@ def EcholinkConnect (Text,PathToPTTGpioValue,verbose):
 		# activate echolink module
 		cmd = 'echo *2# | nc -q 1 127.0.0.1 10000'
 		p = subprocess.Popen(cmd, shell=True)
-		#p = subprocess.check_call(cmd, shell=True)
-		#DebugMessage (verbose, p)	
 		#wait for the system to stop talking
 		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
 		#just a bit of extra margin
-		time.sleep (0.5)
+		time.sleep (3)
 						
 		# connect to the target node
-		cmd = "echo *"+str(Node_ID)+"# | nc -q 1 127.0.0.1 10000 "
+		cmd = 'echo *'+str(Node_ID)+'# | nc -q 1 127.0.0.1 10000'
 		p = subprocess.Popen(cmd, shell=True)
 		# wait for the system to stop talking
 		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
@@ -317,27 +278,7 @@ def SelfIdentify (PathToPTTGpioValue,verbose):
 		# "*" DTMF command forces the system to self ID
 		# not sure why this needs to be *#*#, but it works reliably
 		# while *#* does not
-		cmd = "echo *#*# | nc -q 1 127.0.0.1 10000"
+		cmd = "echo ** | nc -q 1 127.0.0.1 10000"
 		p = subprocess.Popen(cmd, shell=True)
 	except:
 		DebugMessage(1, "Failed to Self ID")
-		
-def CreatePredictionModel (DataSet):
-	### some stuff for later when more advanced machine learning can be implemented
-# ignore for now
-
-#build the prediction model
-    
-	#corpus = []
-#for i in range(0,1): #training data size
-    #convert the sound clip to raw text
-#    TextToReview = VRF.ConvertAudioToText(AudioPaths[i],
-#                                         OnlineTranslationAllowed,
-#                                         OnlineTranslationService)
-    #clean the text and add back to new corpus array
-#    corpus.append(VRF.CleanText(TextToReview,language))
-        
-
-#Create the "Bag of words model" <aka "tokenizing">
-#cv = CountVectorizer()
-#X = cv.fit_transform(corpus)
