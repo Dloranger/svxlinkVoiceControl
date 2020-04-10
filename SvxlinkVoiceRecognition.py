@@ -27,6 +27,11 @@ from os import path
 from SvxlinkVoiceRecognitionConf import * #load the config file
 
 
+#Find the RX & TX Port names
+RxPortName = VRF.GetLogicRxName(LogicName, SvxlinkConfPath,"RX")
+VRF.DebugMessage (verbose,"RxPortname:"+RxPortName)
+TxPortName = VRF.GetLogicRxName(LogicName, SvxlinkConfPath,"TX")
+VRF.DebugMessage (verbose,"TxPortname:"+TxPortName)
 
 #Find the GPIO for the COS
 COS_GPIO = VRF.GetRxCosGpio(RxPortName,SvxlinkConfPath)

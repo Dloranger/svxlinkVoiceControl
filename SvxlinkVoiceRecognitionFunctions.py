@@ -16,6 +16,47 @@ from nltk.stem.porter import PorterStemmer #keep only stem words
 import pyaudio  
 import wave
 import simpleaudio as sa
+
+############################################################################
+############################################################################
+#																		   #
+#    GENERAL FUNCTIONS THAT INTERACT WITH THE FILE SYSTEM, MISC IO 		   #
+#																		   #
+############################################################################
+############################################################################
+
+def GetLogicRxName (LogicName, SvxlinkConfPath,SearchTarget):
+	f=open(SvxlinkConfPath, "r")
+	if f.mode == 'r':
+		configFile =f.read()
+		LogicStart = configFile.find("["+LogicName+"]")
+		# trim down the file to just what we care about
+		try:
+			#400 seems like a reasonable limit to the number of characters
+			configFile = configFile[LogicStart:LogicStart+400]
+		except:
+			# just in case 400 is too many, just take to the end of the file
+			configFile = configFile[LogicStart:]
+
+		#find the row of interest
+		try:
+			TargetStart = configFile.find(SearchTarget + "=")
+		except:
+			TargetStart = configFile.find(SearchTarget + " =")
+			
+		configFile = configFile[TargetStart:]
+		
+		TargetEnd = configFile.find("\n")
+		configFile = configFile[:TargetEnd]
+		
+		TargetDivisor = configFile.find("=")+1
+		Target = configFile[TargetDivisor:]
+		#trim any whitespace that might have been captured
+		Target = Target.rstrip()
+		return str(Target)
+	else:
+		return -1
+
 def GetRxCosGpio(RxPortName,SvxlinkConfPath):
 	f=open(SvxlinkConfPath, "r")
 	if f.mode == 'r':
@@ -24,7 +65,7 @@ def GetRxCosGpio(RxPortName,SvxlinkConfPath):
 		# trim down the file to just what we care about
 		try:
 			#400 seems like a reasonable limit to the number of characters
-			configFile = configFile[RxStart:ReceiverStart+400]
+			configFile = configFile[RxStart:RxStart+400]
 		except:
 			# just in case 400 is too many, just take to the end of the file
 			configFile = configFile[RxStart:]
@@ -44,7 +85,7 @@ def GetTxPTTGpio(TxPortName,SvxlinkConfPath):
 		# trim down the file to just what we care about
 		try:
 			#400 seems like a reasonable limit to the number of characters
-			configFile = configFile[TxStart:ReceiverStart+400]
+			configFile = configFile[TxStart:TxStart+400]
 		except:
 			# just in case 400 is too many, just take to the end of the file
 			configFile = configFile[TxStart:]

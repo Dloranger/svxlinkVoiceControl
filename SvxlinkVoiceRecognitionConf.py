@@ -3,8 +3,6 @@ verbose = 1
 
 # Port Information, where to read other config stuff from
 LogicName = 'ORP_RepeaterLogic_Port1'
-RxPortName = 'RX_Port1'
-TxPortName = 'TX_Port1'
 
 ################## Configure the behavior of the system ########################
 # should we allow the use of online services?  The online services when
