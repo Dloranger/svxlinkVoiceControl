@@ -12,26 +12,6 @@
 #2) a seperate thread should be implemented to record audio to file when the
 #	COS is active and terminate it when the COS is inactive.  How to do this??
 
-################## Configure the behavior of the system ########################
-# should we allow the use of online services?  The online services when
-# available will be far better at converting audio to text, but internet
-# may not always be available to all sites, so an offline approach needs
-# to be available as well. use "True" or "False"
-OnlineTranslationAllowed = True
-
-# Which online translator to use
-OnlineTranslationService = 'Google'   #should work for most uses and is free
-#OnlineTranslationService = 'DeepVoice' # Not implemented yet
-#OnlineTranslationService = 'Sphinx' # Not implemented yet
-
-# what should the wake-work of the system be? 3-4 syllables, 1 word
-WakePhrase = 'Aurora'
-#what language to use "english"
-language = "english"
-
-#How long should be allowed for the command (COS) to come in after the wakeup
-TimeOutCounterInitial = 60 # n*0.1 seconds
-
 #load dependencies
 import numpy as np
 import pandas as pd
@@ -44,23 +24,22 @@ import SvxlinkVoiceRecognitionFunctions as VRF
 from sklearn.feature_extraction.text import CountVectorizer # for bag of words
 import subprocess
 from os import path
+from SvxlinkVoiceRecognitionConf import * #load the config file
 
-# Where does the system store the recorded audio (tempfs to record to ramdisk)
-PathToAudioFile = '/dev/recordedAudio.wav'
 
-# set debugging verbose to 0 for quiet logs, set to 1 for traceable outputs
-verbose = 1
 
-##Which Channels to use?
-RxPortName = "RX_Port1"
-COS_GPIO = VRF.GetRxCosGpio(RxPortName,"/etc/svxlink/svxlink.conf")
-PathToCOSGpioValue = "/sys/class/gpio/"+COS_GPIO+"/value"
+#Find the GPIO for the COS
+COS_GPIO = VRF.GetRxCosGpio(RxPortName,SvxlinkConfPath)
+PathToCOSGpioValue = PathToGpioPrefix+COS_GPIO+PathToGpioSufix
 VRF.DebugMessage (verbose,"RxGPIO:"+PathToCOSGpioValue)
 
-TxPortName = "TX_Port1"
-PTT_GPIO = VRF.GetTxPTTGpio(TxPortName,"/etc/svxlink/svxlink.conf")
-PathToPTTGpioValue = "/sys/class/gpio/"+PTT_GPIO+"/value"
+#Find the GPIO for the PTT
+PTT_GPIO = VRF.GetTxPTTGpio(TxPortName,SvxlinkConfPath)
+PathToPTTGpioValue = PathToGpioPrefix+PTT_GPIO+PathToGpioSufix
 VRF.DebugMessage (verbose,"TxGPIO:"+PathToPTTGpioValue)
+
+#Find the OPEN_ON_DTMF Prefix in the svxlink.conf file
+DTMFprefix = VRF.GetDTMFOpenString(LogicName,SvxlinkConfPath)
 
 #code assumes COS is active low logic type
 COS = VRF.ReadGPIOValue (PathToCOSGpioValue) #get initial value
@@ -226,7 +205,7 @@ while True :
 						(Text.find("activate") != -1):
 					VRF.DebugMessage (verbose,"Try to activate echolink")
 					try:
-						VRF.EcholinkConnect(Text, PathToPTTGpioValue, verbose)
+						VRF.EcholinkConnect(Text,PathToPTTGpioValue,DTMFprefix,verbose)
 					except:
 						VRF.DebugMessage (verbose,"Echolink failed to connect")
 				else:

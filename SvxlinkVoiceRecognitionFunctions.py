@@ -172,8 +172,27 @@ def DebugMessage (verbose,Message):
 				#likely the file is already open by svxlink
 		return -1		
 				
-			
+def GetDTMFOpenString(LogicName,SvxlinkConfPath):
+	f=open(SvxlinkConfPath, "r")
+	if f.mode == 'r':
+		configFile =f.read()
+		LogicStart = configFile.find("["+LogicName+"]")
+		# trim down the file to just what we care about
 		
+		#This should really be replaced with a regular expression
+		try:
+			#400 seems like a reasonable limit to the number of characters
+			configFile = configFile[LogicStart:LogicStart+400]
+		except:
+			# just in case 400 is too many, just take to the end of the file
+			configFile = configFile[LogicStart:]
+		DTMFprefix = configFile[configFile.find("OPEN_ON_DTMF=")+12:
+								configFile.find("OPEN_ON_DTMF=")+15]									
+		#trim any whitespace that might have been captured
+		DTMFprefix = DTMFprefix.rstrip()
+		return str(DTMFprefix)
+	else:
+		return -1				
 				
 def ReadGPIOValue (PathToGpioValue):
 	f=open(PathToGpioValue, "r")
@@ -225,9 +244,9 @@ def WaitForGpioToggle (InitialValue,Timeout,PathToGpioValue,verbose):
 	# this flag tells it to quit after 1 second which is plenty fast for
 	# what we need to do
 			
+
 	
-	
-def EcholinkConnect (Text,PathToPTTGpioValue,verbose):
+def EcholinkConnect (Text,PathToPTTGpioValue,DTMFprefix,verbose):
 	Node_ID = re.findall(r"(?:\s*\d){4,6}", Text)
 	Node_ID = str(Node_ID[0])
 	Node_ID = Node_ID.replace(" ","")
@@ -235,7 +254,8 @@ def EcholinkConnect (Text,PathToPTTGpioValue,verbose):
 	# make sure the length is long enough to have a chance of working
 	try:
 		# activate echolink module
-		cmd = 'echo *2# | nc -q 1 127.0.0.1 10000'
+		cmd = 'echo '+DTMFprefix+'2# | nc -q 1 127.0.0.1 10000'
+		DebugMessage (verbose, cmd)
 		p = subprocess.Popen(cmd, shell=True)
 		#wait for the system to stop talking
 		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
@@ -243,7 +263,7 @@ def EcholinkConnect (Text,PathToPTTGpioValue,verbose):
 		time.sleep (3)
 						
 		# connect to the target node
-		cmd = 'echo *'+str(Node_ID)+'# | nc -q 1 127.0.0.1 10000'
+		cmd = 'echo '+DTMFprefix+str(Node_ID)+'# | nc -q 1 127.0.0.1 10000'
 		p = subprocess.Popen(cmd, shell=True)
 		# wait for the system to stop talking
 		WaitForGpioToggle("1", -1,PathToPTTGpioValue,verbose)
